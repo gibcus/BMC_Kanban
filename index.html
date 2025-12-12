@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab Workflow Kanban Board</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .controls button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .board-wrapper {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .board-header {
+            display: grid;
+            grid-template-columns: 180px repeat(4, 1fr);
+            gap: 0;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #333;
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 10;
+        }
+
+        .board-header-cell {
+            font-weight: 700;
+            color: #333;
+            padding: 12px;
+            text-align: center;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .board-header-cell:first-child {
+            text-align: left;
+        }
+
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .row-group {
+            border-left: 6px solid #ccc;
+            margin-bottom: 2px;
+        }
+
+        .row-group.separator-before {
+            margin-top: 15px;
+            border-top: 3px solid #666;
+            padding-top: 2px;
+        }
+
+        .row-group-header {
+            display: grid;
+            grid-template-columns: 180px repeat(4, 1fr);
+            color: white;
+            padding: 8px 12px;
+            font-weight: 700;
+            font-size: 13px;
+            align-items: center;
+        }
+
+        .row-group-label {
+            font-size: 14px;
+        }
+
+        .row-group-count {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-left: 8px;
+        }
+
+        .subrow {
+            display: grid;
+            grid-template-columns: 180px repeat(4, 1fr);
+            gap: 0;
+            border-bottom: 1px solid #e0e0e0;
+            min-height: 60px;
+        }
+
+        .subrow.separator-before {
+            border-top: 2px solid #999;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+
+        .subrow:hover {
+            background: #fafafa;
+        }
+
+        .subrow-header {
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            color: white;
+            border-right: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .subrow-label {
+            font-size: 12px;
+        }
+
+        .column {
+            background: #f8f9fa;
+            padding: 6px;
+            min-height: 60px;
+            border-right: 1px solid #e0e0e0;
+            position: relative;
+        }
+
+        .column:last-child {
+            border-right: none;
+        }
+
+        .column.drag-over {
+            background: #e3f2fd;
+            border: 2px dashed #2196f3;
+        }
+
+        .cards-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-height: 40px;
+        }
+
+        .card {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: move;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            transition: all 0.2s;
+            border-left: 3px solid #0066cc;
+            font-size: 11px;
+        }
+
+        .card:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transform: translateY(-1px);
+        }
+
+        .card.dragging {
+            opacity: 0.5;
+        }
+
+        .card.status-received {
+            border-left-color: #2196f3;
+        }
+
+        .card.status-inprocess {
+            border-left-color: #ff9800;
+        }
+
+        .card.status-blocked {
+            border-left-color: #f44336;
+        }
+
+        .card.status-finished {
+            border-left-color: #4caf50;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .card-id {
+            font-weight: 700;
+            font-size: 11px;
+            color: #333;
+        }
+
+        .card-initials {
+            background: #0066cc;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .card-details {
+            font-size: 10px;
+            color: #666;
+            line-height: 1.3;
+        }
+
+        .card-notes {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid #eee;
+            font-size: 9px;
+            color: #888;
+            font-style: italic;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .card-actions button {
+            padding: 2px 5px;
+            font-size: 9px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .card-actions button:hover {
+            background: #e0e0e0;
+        }
+
+        .add-card-btn {
+            width: 100%;
+            padding: 4px;
+            background: transparent;
+            border: 1px dashed #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            color: #999;
+            font-size: 11px;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+
+        .add-card-btn:hover {
+            background: #fff;
+            border-color: #666;
+            color: #666;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .form-actions button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        @media (max-width: 1200px) {
+            .board-header,
+            .row-group-header,
+            .subrow {
+                grid-template-columns: 150px repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .board-wrapper {
+                overflow-x: scroll;
+            }
+
+            .board-header,
+            .row-group-header,
+            .subrow {
+                min-width: 900px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧬 Lab Workflow Kanban Board</h1>
+        <p style="color: #666; margin-top: 5px;">Drag and drop cards to update project status</p>
+        <div class="controls">
+            <button class="btn-primary" onclick="showAddCardModal()">+ Add New Project</button>
+            <button class="btn-secondary" onclick="exportData()">Export Data</button>
+            <button class="btn-secondary" onclick="importData()">Import Data</button>
+            <button class="btn-secondary" onclick="clearBoard()">Clear Board</button>
+        </div>
+    </div>
+
+    <div class="board-wrapper">
+        <div class="board-header">
+            <div class="board-header-cell">Protocol / Station</div>
+            <div class="board-header-cell">📥 Received</div>
+            <div class="board-header-cell">⚙️ In Process</div>
+            <div class="board-header-cell">✅ Finished</div>
+            <div class="board-header-cell">🚫 Blocked</div>
+        </div>
+        <div class="board-container" id="board">
+            <!-- Rows will be generated here -->
+        </div>
+    </div>
+
+    <!-- Add/Edit Card Modal -->
+    <div class="modal" id="cardModal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Add New Project</h2>
+            <form id="cardForm">
+                <div class="form-group">
+                    <label>Project ID (YYMMDD format)*</label>
+                    <input type="text" id="cardId" placeholder="e.g., 251203" required>
+                </div>
+                <div class="form-group">
+                    <label>Station / Protocol*</label>
+                    <select id="cardSubrow" required>
+                        <optgroup label="QC">
+                            <option value="qc-dna-fa">DNA - FA</option>
+                            <option value="qc-dna-fp">DNA - FP</option>
+                            <option value="qc-rna-fa">RNA - FA</option>
+                            <option value="qc-rna-fp">RNA - FP</option>
+                        </optgroup>
+                        <optgroup label="PREP - STD">
+                            <option value="prep-std-dna">DNA</option>
+                            <option value="prep-std-rna">RNA</option>
+                        </optgroup>
+                        <optgroup label="PREP - HTL">
+                            <option value="prep-htl-dna">DNA</option>
+                            <option value="prep-htl-rna">RNA</option>
+                        </optgroup>
+                        <optgroup label="PREP - 10X">
+                            <option value="prep-10x-main">10X</option>
+                        </optgroup>
+                        <optgroup label="qPCR">
+                            <option value="qpcr-illumina">Illumina</option>
+                            <option value="qpcr-singular">Singular</option>
+                        </optgroup>
+                        <optgroup label="Sequencing - Singular">
+                            <option value="seq-singular-main">Singular</option>
+                        </optgroup>
+                        <optgroup label="Sequencing - Element">
+                            <option value="seq-element-75pe">75PE</option>
+                            <option value="seq-element-150pe">150PE</option>
+                            <option value="seq-element-300pe">300PE</option>
+                        </optgroup>
+                        <optgroup label="Sequencing - Illumina">
+                            <option value="seq-illumina-i100">i100</option>
+                            <option value="seq-illumina-6000">6000</option>
+                            <option value="seq-illumina-x10b">X10B</option>
+                            <option value="seq-illumina-x25b">X25B</option>
+                        </optgroup>
+                        <optgroup label="Long Read">
+                            <option value="longread-ont">ONT</option>
+                            <option value="longread-pacbio">PacBio</option>
+                        </optgroup>
+                        <optgroup label="Analysis">
+                            <option value="analysis-main">Analysis</option>
+                        </optgroup>
+                        <optgroup label="Billing">
+                            <option value="billing-main">Billing</option>
+                        </optgroup>
+                        <optgroup label="Miscellaneous">
+                            <option value="misc-main">Misc</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status*</label>
+                    <select id="cardStatus" required>
+                        <option value="received">Received</option>
+                        <option value="inprocess">In Process</option>
+                        <option value="finished">Finished</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Sample Details</label>
+                    <input type="text" id="cardSamples" placeholder="e.g., 24 samples">
+                </div>
+                <div class="form-group">
+                    <label>Assigned To (Initials)</label>
+                    <input type="text" id="cardInitials" placeholder="e.g., JD" maxlength="4">
+                </div>
+                <div class="form-group">
+                    <label>Protocol/Kit</label>
+                    <input type="text" id="cardProtocol" placeholder="e.g., NEBNext, Chromium">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="cardNotes" placeholder="Additional notes..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-primary" onclick="saveCard(event)">Save</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Board configuration - hierarchical structure with separators
+        const rows = [
+            {
+                id: 'qc',
+                name: 'QC',
+                color: '#5e35b1',
+                subrows: [
+                    { id: 'qc-dna-fa', name: 'DNA - FA', color: '#7e57c2' },
+                    { id: 'qc-dna-fp', name: 'DNA - FP', color: '#9575cd' },
+                    { id: 'qc-rna-fa', name: 'RNA - FA', color: '#b39ddb', separator: true },
+                    { id: 'qc-rna-fp', name: 'RNA - FP', color: '#d1c4e9' }
+                ]
+            },
+            {
+                id: 'prep-std',
+                name: 'PREP - STD',
+                color: '#1976d2',
+                subrows: [
+                    { id: 'prep-std-dna', name: 'DNA', color: '#42a5f5' },
+                    { id: 'prep-std-rna', name: 'RNA', color: '#64b5f6' }
+                ],
+                separator: true
+            },
+            {
+                id: 'prep-htl',
+                name: 'PREP - HTL',
+                color: '#0288d1',
+                subrows: [
+                    { id: 'prep-htl-dna', name: 'DNA', color: '#29b6f6' },
+                    { id: 'prep-htl-rna', name: 'RNA', color: '#4fc3f7' }
+                ]
+            },
+            {
+                id: 'prep-10x',
+                name: 'PREP - 10X',
+                color: '#0097a7',
+                subrows: [
+                    { id: 'prep-10x-main', name: '10X', color: '#26c6da' }
+                ]
+            },
+            {
+                id: 'qpcr',
+                name: 'qPCR',
+                color: '#f57c00',
+                subrows: [
+                    { id: 'qpcr-illumina', name: 'Illumina', color: '#ff9800' },
+                    { id: 'qpcr-singular', name: 'Singular', color: '#ffb74d' }
+                ]
+            },
+            {
+                id: 'seq-singular',
+                name: 'Sequencing - Singular',
+                color: '#c2185b',
+                subrows: [
+                    { id: 'seq-singular-main', name: 'Singular', color: '#e91e63' }
+                ],
+                separator: true
+            },
+            {
+                id: 'seq-element',
+                name: 'Sequencing - Element',
+                color: '#7b1fa2',
+                subrows: [
+                    { id: 'seq-element-75pe', name: '75PE', color: '#9c27b0' },
+                    { id: 'seq-element-150pe', name: '150PE', color: '#ab47bc' },
+                    { id: 'seq-element-300pe', name: '300PE', color: '#ba68c8' }
+                ]
+            },
+            {
+                id: 'seq-illumina',
+                name: 'Sequencing - Illumina',
+                color: '#303f9f',
+                subrows: [
+                    { id: 'seq-illumina-i100', name: 'i100', color: '#3f51b5' },
+                    { id: 'seq-illumina-6000', name: '6000', color: '#5c6bc0' },
+                    { id: 'seq-illumina-x10b', name: 'X10B', color: '#7986cb' },
+                    { id: 'seq-illumina-x25b', name: 'X25B', color: '#9fa8da' }
+                ],
+                separator: true
+            },
+            {
+                id: 'longread',
+                name: 'Long Read',
+                color: '#00796b',
+                subrows: [
+                    { id: 'longread-ont', name: 'ONT', color: '#26a69a' },
+                    { id: 'longread-pacbio', name: 'PacBio', color: '#4db6ac' }
+                ]
+            },
+            {
+                id: 'analysis',
+                name: 'Analysis',
+                color: '#5d4037',
+                subrows: [
+                    { id: 'analysis-main', name: 'Analysis', color: '#795548' }
+                ]
+            },
+            {
+                id: 'billing',
+                name: 'Billing',
+                color: '#455a64',
+                subrows: [
+                    { id: 'billing-main', name: 'Billing', color: '#607d8b' }
+                ]
+            },
+            {
+                id: 'misc',
+                name: 'Miscellaneous',
+                color: '#616161',
+                subrows: [
+                    { id: 'misc-main', name: 'Misc', color: '#757575' }
+                ]
+            }
+        ];
+
+        const statuses = ['received', 'inprocess', 'finished', 'blocked'];
+
+        let cards = [
+            {
+                id: '251203',
+                subrow: 'prep-10x-main',
+                status: 'received',
+                samples: '5 samples',
+                initials: 'JD',
+                protocol: 'TissueFlex',
+                notes: 'Dec 11 start'
+            },
+            {
+                id: '251124',
+                subrow: 'qc-dna-fa',
+                status: 'inprocess',
+                samples: '74 samples',
+                initials: 'AB',
+                protocol: 'Exome',
+                notes: 'Processing'
+            },
+            {
+                id: '251109',
+                subrow: 'qc-rna-fp',
+                status: 'inprocess',
+                samples: '288 samples',
+                initials: 'MK',
+                protocol: 'DGE ZapR',
+                notes: ''
+            },
+            {
+                id: '251164',
+                subrow: 'qpcr-illumina',
+                status: 'inprocess',
+                samples: '',
+                initials: 'LT',
+                protocol: 'Validation',
+                notes: ''
+            },
+            {
+                id: '251155',
+                subrow: 'seq-element-150pe',
+                status: 'finished',
+                samples: '',
+                initials: 'JD',
+                protocol: 'Complete',
+                notes: 'Analysis ready'
+            }
+        ];
+
+        let currentEditingCard = null;
+
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            rows.forEach(row => board.appendChild(createRowGroup(row)));
+            renderAllCards();
+            loadFromLocalStorage();
+        }
+
+        function createRowGroup(row) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'row-group';
+            if (row.separator) groupDiv.classList.add('separator-before');
+            groupDiv.style.borderLeft = `6px solid ${row.color}`;
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'row-group-header';
+            headerDiv.dataset.rowId = row.id;
+            headerDiv.style.background = `linear-gradient(135deg, ${row.color}, ${adjustColor(row.color, 30)})`;
+            
+            const rowCardCount = cards.filter(c => row.subrows.some(sr => sr.id === c.subrow)).length;
+            headerDiv.innerHTML = `
+                <span class="row-group-label">${row.name}</span>
+                <span class="row-group-count">${rowCardCount} project${rowCardCount !== 1 ? 's' : ''}</span>
+            `;
+            groupDiv.appendChild(headerDiv);
+
+            row.subrows.forEach(subrow => groupDiv.appendChild(createSubrow(row, subrow)));
+            return groupDiv;
+        }
+
+        function createSubrow(row, subrow) {
+            const subrowDiv = document.createElement('div');
+            subrowDiv.className = 'subrow';
+            if (subrow.separator) subrowDiv.classList.add('separator-before');
+            subrowDiv.dataset.subrowId = subrow.id;
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'subrow-header';
+            headerDiv.style.background = subrow.color;
+            headerDiv.innerHTML = `<span class="subrow-label">${subrow.name}</span>`;
+            subrowDiv.appendChild(headerDiv);
+
+            statuses.forEach(status => {
+                const columnDiv = document.createElement('div');
+                columnDiv.className = 'column';
+                columnDiv.dataset.subrowId = subrow.id;
+                columnDiv.dataset.status = status;
+
+                const containerDiv = document.createElement('div');
+                containerDiv.className = 'cards-container';
+                containerDiv.dataset.subrowId = subrow.id;
+                containerDiv.dataset.status = status;
+
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-card-btn';
+                addBtn.textContent = '+';
+                addBtn.title = 'Add card';
+                addBtn.onclick = () => showAddCardModal(subrow.id, status);
+
+                columnDiv.appendChild(containerDiv);
+                columnDiv.appendChild(addBtn);
+                subrowDiv.appendChild(columnDiv);
+
+                containerDiv.addEventListener('dragover', handleDragOver);
+                containerDiv.addEventListener('drop', handleDrop);
+                containerDiv.addEventListener('dragenter', handleDragEnter);
+                containerDiv.addEventListener('dragleave', handleDragLeave);
+            });
+
+            return subrowDiv;
+        }
+
+        function adjustColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.min(255, Math.max(0, (num >> 16) + amt));
+            const G = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amt));
+            const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
+            return '#' + ((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1);
+        }
+
+        function renderAllCards() {
+            document.querySelectorAll('.cards-container').forEach(c => c.innerHTML = '');
+            cards.forEach(card => {
+                const cardEl = createCard(card);
+                const container = document.querySelector(
+                    `.cards-container[data-subrow-id="${card.subrow}"][data-status="${card.status}"]`
+                );
+                if (container) container.appendChild(cardEl);
+            });
+            updateRowCounts();
+        }
+
+        function createCard(card) {
+            const cardEl = document.createElement('div');
+            cardEl.className = `card status-${card.status}`;
+            cardEl.draggable = true;
+            cardEl.dataset.cardId = card.id;
+            cardEl.innerHTML = `
+                <div class="card-header">
+                    <span class="card-id">${card.id}</span>
+                    ${card.initials ? `<span class="card-initials">${card.initials}</span>` : ''}
+                </div>
+                <div class="card-details">
+                    ${card.samples ? `<div>📊 ${card.samples}</div>` : ''}
+                    ${card.protocol ? `<div>🧪 ${card.protocol}</div>` : ''}
+                </div>
+                ${card.notes ? `<div class="card-notes">${card.notes}</div>` : ''}
+                <div class="card-actions">
+                    <button onclick="editCard('${card.id}')">Edit</button>
+                    <button onclick="deleteCard('${card.id}')">Delete</button>
+                </div>
+            `;
+            cardEl.addEventListener('dragstart', handleDragStart);
+            cardEl.addEventListener('dragend', handleDragEnd);
+            return cardEl;
+        }
+
+        let draggedCard = null;
+
+        function handleDragStart(e) {
+            draggedCard = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.column').forEach(col => col.classList.remove('drag-over'));
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            const column = this.closest('.column');
+            if (column) column.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            if (e.target === this) {
+                const column = this.closest('.column');
+                if (column) column.classList.remove('drag-over');
+            }
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) e.stopPropagation();
+            const card = cards.find(c => c.id === draggedCard.dataset.cardId);
+            if (card) {
+                card.subrow = this.dataset.subrowId;
+                card.status = this.dataset.status;
+                saveToLocalStorage();
+                renderAllCards();
+            }
+            return false;
+        }
+
+        function showAddCardModal(subrowId, status = 'received') {
+            currentEditingCard = null;
+            document.getElementById('modalTitle').textContent = 'Add New Project';
+            document.getElementById('cardForm').reset();
+            if (subrowId) document.getElementById('cardSubrow').value = subrowId;
+            if (status) document.getElementById('cardStatus').value = status;
+            document.getElementById('cardModal').classList.add('active');
+        }
+
+        function editCard(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) return;
+            currentEditingCard = card;
+            document.getElementById('modalTitle').textContent = 'Edit Project';
+            document.getElementById('cardId').value = card.id;
+            document.getElementById('cardSubrow').value = card.subrow;
+            document.getElementById('cardStatus').value = card.status;
+            document.getElementById('cardSamples').value = card.samples || '';
+            document.getElementById('cardInitials').value = card.initials || '';
+            document.getElementById('cardProtocol').value = card.protocol || '';
+            document.getElementById('cardNotes').value = card.notes || '';
+            document.getElementById('cardModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('cardModal').classList.remove('active');
+            currentEditingCard = null;
+        }
+
+        function saveCard(e) {
+            console.log('saveCard called');
+            
+            // Manual validation since we're not using form submit
+            const cardId = document.getElementById('cardId').value.trim();
+            const cardSubrow = document.getElementById('cardSubrow').value;
+            const cardStatus = document.getElementById('cardStatus').value;
+            
+            if (!cardId || !cardSubrow || !cardStatus) {
+                alert('Please fill in all required fields (marked with *)');
+                return;
+            }
+            
+            const cardData = {
+                id: cardId,
+                subrow: cardSubrow,
+                status: cardStatus,
+                samples: document.getElementById('cardSamples').value,
+                initials: document.getElementById('cardInitials').value.toUpperCase(),
+                protocol: document.getElementById('cardProtocol').value,
+                notes: document.getElementById('cardNotes').value
+            };
+            console.log('Card data:', cardData);
+            if (currentEditingCard) {
+                Object.assign(currentEditingCard, cardData);
+            } else {
+                cards.push(cardData);
+            }
+            console.log('Total cards:', cards.length);
+            saveToLocalStorage();
+            renderAllCards();
+            closeModal();
+        }
+
+        function deleteCard(cardId) {
+            console.log('deleteCard called for:', cardId);
+            console.log('Cards before delete:', cards.length);
+            // Note: Confirmation dialog removed due to browser sandbox restrictions
+            // Card will be deleted immediately when clicking Delete button
+            cards = cards.filter(c => c.id !== cardId);
+            console.log('Cards after delete:', cards.length);
+            saveToLocalStorage();
+            renderAllCards();
+        }
+
+        function updateRowCounts() {
+            console.log('updateRowCounts called, total cards:', cards.length);
+            rows.forEach(row => {
+                const count = cards.filter(c => row.subrows.some(sr => sr.id === c.subrow)).length;
+                console.log(`Row ${row.name}: ${count} projects`);
+                const headerEl = document.querySelector(`[data-row-id="${row.id}"]`);
+                if (headerEl) {
+                    const countEl = headerEl.querySelector('.row-group-count');
+                    if (countEl) {
+                        countEl.textContent = `${count} project${count !== 1 ? 's' : ''}`;
+                        console.log(`Updated ${row.name} count to: ${count}`);
+                    } else {
+                        console.log(`Could not find count element for ${row.name}`);
+                    }
+                } else {
+                    console.log(`Could not find header for ${row.name}`);
+                }
+            });
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('labKanbanCards', JSON.stringify(cards));
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('labKanbanCards');
+            if (saved) {
+                cards = JSON.parse(saved);
+                renderAllCards();
+            }
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(cards, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `lab-kanban-export-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedCards = JSON.parse(event.target.result);
+                        if (confirm('This will replace all current data. Continue?')) {
+                            cards = importedCards;
+                            saveToLocalStorage();
+                            renderAllCards();
+                        }
+                    } catch (error) {
+                        alert('Error importing file. Please check the file format.');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearBoard() {
+            if (confirm('Are you sure you want to clear all projects? This cannot be undone.')) {
+                cards = [];
+                saveToLocalStorage();
+                renderAllCards();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initBoard);
+    </script>
+</body>
+</html>
