@@ -835,19 +835,19 @@
     </div>
 
     <script>
-        // Firebase Configuration (from Step 3.2)
+        // Your web app's Firebase configuration
         const firebaseConfig = {
-          apiKey: "YOUR-API-KEY",
-          authDomain: "YOUR-PROJECT.firebaseapp.com",
-          databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-          projectId: "YOUR-PROJECT",
-          storageBucket: "YOUR-PROJECT.appspot.com",
-          messagingSenderId: "YOUR-SENDER-ID",
-          appId: "YOUR-APP-ID"
+          apiKey: "AIzaSyAvH-mKDYyHC_1C3Uh6bRpcP9Xv-x3Ht8k",
+          authDomain: "bmc-kanban.firebaseapp.com",
+          databaseURL: "https://bmc-kanban-default-rtdb.firebaseio.com",
+          projectId: "bmc-kanban",
+          storageBucket: "bmc-kanban.firebasestorage.app",
+          messagingSenderId: "221842861776",
+          appId: "1:221842861776:web:ba70dc404e0c321087b8d5"
         };
 
         // Slack Webhook URL (from Step 4.3)
-        const SLACK_WEBHOOK_URL = ""; // Leave empty until you get webhook
+        const SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"; // Leave empty until you get webhook
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();    
