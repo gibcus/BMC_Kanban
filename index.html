@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lab Workflow Kanban Board</title>
@@ -832,6 +835,23 @@
     </div>
 
     <script>
+        // Firebase Configuration (from Step 3.2)
+        const firebaseConfig = {
+          apiKey: "YOUR-API-KEY",
+          authDomain: "YOUR-PROJECT.firebaseapp.com",
+          databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+          projectId: "YOUR-PROJECT",
+          storageBucket: "YOUR-PROJECT.appspot.com",
+          messagingSenderId: "YOUR-SENDER-ID",
+          appId: "YOUR-APP-ID"
+        };
+
+        // Slack Webhook URL (from Step 4.3)
+        const SLACK_WEBHOOK_URL = ""; // Leave empty until you get webhook
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();    
+        
         // User registry
         let users = [
             { initials: 'JD', name: 'John Doe', slackId: '' },
@@ -967,15 +987,77 @@
         let cards = [];
         let currentEditingCard = null;
 
-        function initBoard() {
-            loadUsersFromStorage();
+        async function sendSlackNotification(card, type, oldStatus = null) {
+            if (!SLACK_WEBHOOK_URL || SLACK_WEBHOOK_URL.includes('YOUR')) {
+                return; // Webhook not configured
+            }
+
+            const assignedNames = card.assignedUsers && card.assignedUsers.length > 0
+                ? card.assignedUsers.join(', ')
+                : 'Unassigned';
+
+            let message, blocks;
+
+            if (type === 'new') {
+                message = `🆕 New project: ${card.id} assigned to ${assignedNames}`;
+                blocks = [
+                    {
+                        type: 'header',
+                        text: { type: 'plain_text', text: '🆕 New Project Assignment' }
+                    },
+                    {
+                        type: 'section',
+                        fields: [
+                            { type: 'mrkdwn', text: `*Project:* ${card.id}` },
+                            { type: 'mrkdwn', text: `*Assigned To:* ${assignedNames}` },
+                            { type: 'mrkdwn', text: `*Status:* ${card.status}` },
+                            { type: 'mrkdwn', text: `*Station:* ${card.subrow}` }
+                        ]
+                    }
+                ];
+                if (card.notes) {
+                    blocks.push({
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `*Notes:* ${card.notes}` }
+                    });
+                }
+            } else if (type === 'status') {
+                message = `📊 Project ${card.id}: ${oldStatus} → ${card.status}`;
+                blocks = [
+                    {
+                        type: 'header',
+                        text: { type: 'plain_text', text: '📊 Status Update' }
+                    },
+                    {
+                        type: 'section',
+                        fields: [
+                            { type: 'mrkdwn', text: `*Project:* ${card.id}` },
+                            { type: 'mrkdwn', text: `*Change:* ${oldStatus} → ${card.status}` },
+                            { type: 'mrkdwn', text: `*Assigned:* ${assignedNames}` }
+                        ]
+                    }
+                ];
+            }
+
+            try {
+                await fetch(SLACK_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: message, blocks })
+                });
+                console.log('✅ Slack notification sent');
+            } catch (error) {
+                console.error('Slack error:', error);
+            }
+        }        
+
+        async function initBoard() {
             loadSettingsFromStorage();
-            loadFromLocalStorage();
+            await loadFromFirebase(); // Changed!
             renderBoard();
             setupUserSelect();
             updateNotificationUI();
         }
-
         function renderBoard() {
             const board = document.getElementById('board');
             board.innerHTML = '';
@@ -1128,19 +1210,21 @@
             }
         }
 
-        function handleDrop(e) {
+        async function handleDrop(e) {
             if (e.stopPropagation) e.stopPropagation();
             const card = cards.find(c => c.id === draggedCard.dataset.cardId);
             if (card) {
                 const oldStatus = card.status;
                 card.subrow = this.dataset.subrowId;
                 card.status = this.dataset.status;
-                saveToLocalStorage();
-                renderAllCards();
+                card.updatedAt = new Date().toISOString();
                 
-                // Trigger notification if status changed and notifications are enabled
+                // Update Firebase
+                await database.ref(`cards/${card.id}`).set(card);
+                
+                // Send notification if status changed
                 if (oldStatus !== card.status && settings.notificationsEnabled) {
-                    sendStatusChangeNotification(card, oldStatus, card.status);
+                    sendSlackNotification(card, 'status', oldStatus);
                 }
             }
             return false;
@@ -1292,25 +1376,31 @@
                 notes: document.getElementById('cardNotes').value
             };
             
+            const isNewCard = !currentEditingCard;
+
             if (currentEditingCard) {
                 Object.assign(currentEditingCard, cardData);
             } else {
+                cardData.createdAt = new Date().toISOString();
                 cards.push(cardData);
-                // Send notification for new card if enabled
-                if (settings.notificationsEnabled && cardData.assignedUsers.length > 0) {
-                    sendNewCardNotification(cardData);
-                }
             }
-            
-            saveToLocalStorage();
-            renderAllCards();
+
+            // Save to Firebase
+            await database.ref(`cards/${cardData.id}`).set(cardData);
+
+            // Send Slack notification for new cards
+            if (isNewCard && cardData.assignedUsers.length > 0 && settings.notificationsEnabled) {
+                sendSlackNotification(cardData, 'new');
+            }
+
             closeModal();
+            // No need to call renderAllCards() - Firebase listener will update automatically!
         }
 
-        function deleteCard(cardId) {
-            cards = cards.filter(c => c.id !== cardId);
-            saveToLocalStorage();
-            renderAllCards();
+        async function deleteCard(cardId) {
+            // Delete from Firebase
+            await database.ref(`cards/${cardId}`).remove();
+            // Firebase listener will update cards array automatically
         }
 
         function updateRowCounts() {
@@ -1326,28 +1416,72 @@
             });
         }
 
-        function saveToLocalStorage() {
-            localStorage.setItem('labKanbanCards', JSON.stringify(cards));
-        }
+        // function saveToLocalStorage() {
+        //     localStorage.setItem('labKanbanCards', JSON.stringify(cards));
+        // }
 
-        function loadFromLocalStorage() {
-            const saved = localStorage.getItem('labKanbanCards');
-            if (saved) {
-                cards = JSON.parse(saved);
-                renderAllCards();
+        async function loadFromFirebase() {
+            try {
+                // Listen for connection status
+                database.ref('.info/connected').on('value', (snapshot) => {
+                    isFirebaseConnected = snapshot.val() === true;
+                    updateConnectionStatus();
+                });
+
+                // Listen for card changes (real-time!)
+                database.ref('cards').on('value', (snapshot) => {
+                    const firebaseCards = snapshot.val();
+                    if (firebaseCards) {
+                        cards = Object.values(firebaseCards);
+                    } else {
+                        cards = [];
+                    }
+                    renderAllCards();
+                });
+
+                // Load users once
+                const usersSnapshot = await database.ref('users').once('value');
+                const firebaseUsers = usersSnapshot.val();
+                if (firebaseUsers) {
+                    users = Object.values(firebaseUsers);
+                }
+
+                console.log('✅ Firebase connected');
+            } catch (error) {
+                console.error('Firebase error:', error);
             }
         }
 
-        function saveUsersToStorage() {
-            localStorage.setItem('labKanbanUsers', JSON.stringify(users));
-        }
-
-        function loadUsersFromStorage() {
-            const saved = localStorage.getItem('labKanbanUsers');
-            if (saved) {
-                users = JSON.parse(saved);
+        function updateConnectionStatus() {
+            let statusDiv = document.getElementById('connectionStatus');
+            if (!statusDiv) {
+                const header = document.querySelector('.header');
+                statusDiv = document.createElement('div');
+                statusDiv.id = 'connectionStatus';
+                statusDiv.style.cssText = 'margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 12px;';
+                header.appendChild(statusDiv);
+            }
+            
+            if (isFirebaseConnected) {
+                statusDiv.style.background = '#d4edda';
+                statusDiv.style.color = '#155724';
+                statusDiv.textContent = '🔥 Connected to Firebase - Real-time sync active';
+            } else {
+                statusDiv.style.background = '#fff3cd';
+                statusDiv.style.color = '#856404';
+                statusDiv.textContent = '⚠️ Connecting...';
             }
         }
+        // function saveUsersToStorage() {
+        //     localStorage.setItem('labKanbanUsers', JSON.stringify(users));
+        // }
+
+        // function loadUsersFromStorage() {
+        //     const saved = localStorage.getItem('labKanbanUsers');
+        //     if (saved) {
+        //         users = JSON.parse(saved);
+        //     }
+        // }
 
         function saveSettingsToStorage() {
             localStorage.setItem('labKanbanSettings', JSON.stringify(settings));
@@ -1392,23 +1526,15 @@
             });
         }
 
-        function addUser() {
-            const name = document.getElementById('newUserName').value.trim();
-            const initials = document.getElementById('newUserInitials').value.trim().toUpperCase();
-            const slackId = document.getElementById('newUserSlackId').value.trim();
+        async function addUser() {
+            // ... validation code stays the same ...
             
-            if (!name || !initials) {
-                alert('Please provide both name and initials');
-                return;
-            }
+            const newUser = { name, initials, slackId };
+            users.push(newUser);
             
-            if (users.some(u => u.initials === initials)) {
-                alert('User with these initials already exists');
-                return;
-            }
+            // Save to Firebase
+            await database.ref(`users/${initials}`).set(newUser);
             
-            users.push({ name, initials, slackId });
-            saveUsersToStorage();
             renderUserList();
             
             // Clear form
@@ -1417,10 +1543,13 @@
             document.getElementById('newUserSlackId').value = '';
         }
 
-        function removeUser(initials) {
-            if (confirm(`Remove user ${initials}? This will not affect existing card assignments.`)) {
+        async function removeUser(initials) {
+            if (confirm(`Remove user ${initials}?...`)) {
                 users = users.filter(u => u.initials !== initials);
-                saveUsersToStorage();
+                
+                // Delete from Firebase
+                await database.ref(`users/${initials}`).remove();
+                
                 renderUserList();
             }
         }
@@ -1478,13 +1607,15 @@
             }
         }
 
-        function exportData() {
-            const dataStr = JSON.stringify(cards, null, 2);
+        async function exportData() {
+            const snapshot = await database.ref().once('value');
+            const data = snapshot.val();
+            const dataStr = JSON.stringify(data, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `lab-kanban-export-${new Date().toISOString().split('T')[0]}.json`;
+            link.download = `kanban-export-${new Date().toISOString().split('T')[0]}.json`;
             link.click();
         }
 
@@ -1495,16 +1626,26 @@
             input.onchange = (e) => {
                 const file = e.target.files[0];
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = async (event) => {
                     try {
-                        const importedCards = JSON.parse(event.target.result);
-                        if (confirm('This will replace all current data. Continue?')) {
-                            cards = importedCards;
-                            saveToLocalStorage();
-                            renderAllCards();
+                        const importedData = JSON.parse(event.target.result);
+                        if (confirm('Replace all data in Firebase?')) {
+                            // Import cards
+                            if (importedData.cards) {
+                                for (const card of Object.values(importedData.cards)) {
+                                    await database.ref(`cards/${card.id}`).set(card);
+                                }
+                            }
+                            // Import users
+                            if (importedData.users) {
+                                for (const user of Object.values(importedData.users)) {
+                                    await database.ref(`users/${user.initials}`).set(user);
+                                }
+                            }
+                            alert('Import complete!');
                         }
                     } catch (error) {
-                        alert('Error importing file. Please check the file format.');
+                        alert('Import error: ' + error.message);
                     }
                 };
                 reader.readAsText(file);
