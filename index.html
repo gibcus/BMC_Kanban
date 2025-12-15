@@ -340,7 +340,7 @@
             background: white;
             padding: 30px;
             border-radius: 8px;
-            max-width: 500px;
+            max-width: 600px;  /* Changed from 500px to 600px */
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
@@ -587,10 +587,24 @@
             background: #c82333;
         }
 
-        .add-user-form {
+/*        .add-user-form {
             display: flex;
             gap: 8px;
             margin-top: 10px;
+            flex-wrap: wrap;  /* Add this line - allows wrapping if too wide */
+        }*/
+
+        .add-user-form {
+            display: flex;
+            flex-direction: column;  /* Stack vertically on narrow screens */
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        @media (min-width: 768px) {
+            .add-user-form {
+                flex-direction: row;  /* Side by side on wider screens */
+            }
         }
 
         .add-user-form input {
@@ -1528,7 +1542,19 @@
         }
 
         async function addUser() {
-            // ... validation code stays the same ...
+            const name = document.getElementById('newUserName').value.trim();
+            const initials = document.getElementById('newUserInitials').value.trim().toUpperCase();
+            const slackId = document.getElementById('newUserSlackId').value.trim();
+            
+            if (!name || !initials) {
+                alert('Please provide both name and initials');
+                return;
+            }
+            
+            if (users.some(u => u.initials === initials)) {
+                alert('User with these initials already exists');
+                return;
+            }
             
             const newUser = { name, initials, slackId };
             users.push(newUser);
